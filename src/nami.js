@@ -35,14 +35,14 @@ var timer = require('timers');
 /**
  * Nami client.
  * @constructor
- * @param amiData The configuration for ami.
+ * @param {object} options The configuration for ami.
  * @augments EventEmitter
  */
-function Nami(amiData) {
+function Nami(options) {
     Nami.super_.call(this);
-    this.logger = require('log4js').getLogger('Nami.Client');
+    this.logger = options.logger || defaultLoggger();
     this.connected = false;
-    this.amiData = amiData;
+    this.options = options;
     this.EOL = "\r\n";
     this.EOM = this.EOL + this.EOL;
     this.welcomeMessage = "Asterisk Call Manager/.*" + this.EOL;
@@ -57,12 +57,26 @@ function Nami(amiData) {
 util.inherits(Nami, events.EventEmitter);
 
 /**
+ * Constructs default logger for this library
+ */
+function defaultLoggger() {
+    return {
+        fatal: console.error.bind(console),
+        error: console.error.bind(console),
+        warn : console.warn.bind(console),
+        info : console.info.bind(console),
+        debug: console.log.bind(console),
+        trace: console.log.bind(console)
+    };
+}
+
+/**
  * Called when a message arrives and is decoded as an event (namiRawEvent event).
  * This will actually instantiate an Event. If the event has an ActionID,
  * the corresponding response is looked up and will have this event appended.
  * Otherwise, the event "namiEvent" is fired. Also, the event "namiEvent<EventName>"
  * is fired (i.e: on event Dial, namiEventDial will be fired).
- * 
+ *
  * @see Nami#onRawMessage(String)
  * @param {Event} response An Event message.
  * @returns void
@@ -106,7 +120,7 @@ Nami.prototype.onRawResponse = function (response) {
         (typeof (response.message) !== 'undefined')
             && (response.message.indexOf('follow') !== -1)
     ) {
-        this.responses[response.actionid] = response;            
+        this.responses[response.actionid] = response;
     } else if (typeof (this.callbacks[response.actionid]) !== 'undefined') {
         this.callbacks[response.actionid](response);
         delete this.callbacks[response.actionid];
@@ -197,7 +211,7 @@ Nami.prototype.onWelcomeMessage = function (data) {
             self.onData(data);
         });
         this.send(
-            new action.Login(this.amiData.username, this.amiData.secret),
+            new action.Login(this.options.username, this.options.secret),
             function (response) {
                 if (response.response !== 'Success') {
                     self.emit('namiLoginIncorrect');
@@ -256,7 +270,7 @@ Nami.prototype.initializeSocket = function () {
         var event = { event: 'Connect' };
         self.emit(baseEvent + event.event, event);
     });
- 
+
     // @param {Error} error Fires right before the `close` event
     this.socket.on('error', function (error) {
         self.logger.debug('Socket error: ' + util.inspect(error));
@@ -288,7 +302,7 @@ Nami.prototype.initializeSocket = function () {
         self.onWelcomeMessage(data);
     });
 
-    this.socket.connect(this.amiData.port, this.amiData.host);
+    this.socket.connect(this.options.port, this.options.host);
 };
 
 /**
